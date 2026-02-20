@@ -281,8 +281,10 @@ function CardEditSheet({
 
 // --- Main Calendar ---
 
+const EMPTY_CARDS: ContentCard[] = []
+
 export function ContentCalendar({ brandId }: { brandId: string }) {
-  const cards = useCalendarStore((s) => s.cards[brandId] ?? [])
+  const cards = useCalendarStore((s) => s.cards[brandId] ?? EMPTY_CARDS)
   const currentDate = useCalendarStore((s) => s.currentDate)
   const generateCalendar = useCalendarStore((s) => s.generateCalendar)
   const navigateForward = useCalendarStore((s) => s.navigateForward)

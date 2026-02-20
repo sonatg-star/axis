@@ -38,90 +38,6 @@ export const defaultSession: ChatSession = {
   isTyping: false,
 }
 
-// --- Mock response data ---
-
-const FULL_AUTO_RESPONSES: ((brandName: string) => string)[] = [
-  (name) =>
-    `Thanks for sharing! I'm now analyzing ${name}'s brand positioning, target market, and competitive landscape.\n\nThis will take a moment while I research the best strategy for you...`,
-  () =>
-    `I've completed my analysis. Here's what I'm building into your strategy:\n\n` +
-    `- **Brand Positioning** tailored to your unique value proposition\n` +
-    `- **Target Audience Profiles** based on your description\n` +
-    `- **Platform Strategy** optimized for maximum reach\n` +
-    `- **Content Pillars** that align with your brand story\n` +
-    `- **Posting Schedule** based on audience behavior data\n\n` +
-    `Let me finalize the details...`,
-  () =>
-    `Your social media strategy is ready! I've created a comprehensive plan covering all 10 key areas.\n\n` +
-    `Click the **"View Strategy"** button below to review your complete strategy document. You can edit any section and regenerate parts you'd like to refine.`,
-]
-
-const MANUAL_QUESTIONS: {
-  question: (brandName: string) => string
-  options: MessageOption[]
-}[] = [
-  {
-    question: (name) =>
-      `Let's build ${name}'s strategy step by step. First — what industry are you in?`,
-    options: [
-      { id: "tech", label: "Technology" },
-      { id: "fnb", label: "Food & Beverage" },
-      { id: "fashion", label: "Fashion & Beauty" },
-      { id: "health", label: "Health & Wellness" },
-    ],
-  },
-  {
-    question: () => `Who is your primary target audience?`,
-    options: [
-      { id: "genz", label: "Gen Z (18-25)" },
-      { id: "millennials", label: "Millennials (25-40)" },
-      { id: "professionals", label: "Working Professionals" },
-      { id: "broad", label: "Broad / Everyone" },
-    ],
-  },
-  {
-    question: () => `Which platforms are most important for your brand?`,
-    options: [
-      { id: "instagram", label: "Instagram & TikTok" },
-      { id: "linkedin", label: "LinkedIn & X" },
-      { id: "all", label: "All Major Platforms" },
-      { id: "unsure", label: "Not sure — recommend for me" },
-    ],
-  },
-  {
-    question: () => `What tone of voice fits your brand best?`,
-    options: [
-      { id: "professional", label: "Professional & Authoritative" },
-      { id: "casual", label: "Casual & Friendly" },
-      { id: "bold", label: "Bold & Energetic" },
-      { id: "inspirational", label: "Warm & Inspirational" },
-    ],
-  },
-  {
-    question: () =>
-      `Last one — what's your primary social media goal right now?`,
-    options: [
-      { id: "awareness", label: "Brand Awareness" },
-      { id: "engagement", label: "Community & Engagement" },
-      { id: "leads", label: "Leads & Sales" },
-      { id: "authority", label: "Thought Leadership" },
-    ],
-  },
-]
-
-const MANUAL_FINAL_RESPONSE =
-  `I've built your strategy based on your answers. Here's what's included:\n\n` +
-  `- **Brand Summary** reflecting your identity\n` +
-  `- **Target Audience** profiles matching your selection\n` +
-  `- **Platform Strategy** optimized for your chosen channels\n` +
-  `- **Content Pillars** aligned with your goals\n` +
-  `- **Tone of Voice** guidelines\n` +
-  `- **Posting Schedule & Format Mix**\n` +
-  `- **KPIs** to track your progress\n\n` +
-  `Click **"View Strategy"** to review your complete strategy document.`
-
-// --- Store ---
-
 function createMessage(
   role: "user" | "assistant",
   content: string,
@@ -134,10 +50,6 @@ function createMessage(
     timestamp: Date.now(),
     options,
   }
-}
-
-function getManualQuestionIndex(messages: Message[]): number {
-  return messages.filter((m) => m.role === "user").length
 }
 
 // Pre-seed Coff AI chat session (pilot brand)
@@ -169,6 +81,145 @@ const SEED_COFF_AI_SESSION: ChatSession = {
   isTyping: false,
 }
 
+// --- Helper: Stream AI response ---
+
+async function streamAIResponse(
+  brandId: string,
+  session: ChatSession,
+  set: (fn: (state: { sessions: Record<string, ChatSession> }) => { sessions: Record<string, ChatSession> }) => void,
+  get: () => { sessions: Record<string, ChatSession> }
+) {
+  const brands = useBrandStore.getState().brands
+  const brand = brands.find((b) => b.id === brandId)
+  const brandName = brand?.name ?? "your brand"
+  const brandDescription = brand?.description ?? ""
+
+  // Build messages for API
+  const currentSession = get().sessions[brandId]
+  if (!currentSession) return
+
+  const apiMessages = currentSession.messages
+    .filter((m) => m.role === "user" || m.role === "assistant")
+    .map((m) => ({ role: m.role, content: m.content }))
+
+  try {
+    const response = await fetch("/api/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messages: apiMessages,
+        brandName,
+        brandDescription,
+        mode: currentSession.mode,
+      }),
+    })
+
+    if (!response.ok) {
+      throw new Error(`API error: ${response.status}`)
+    }
+
+    const reader = response.body?.getReader()
+    if (!reader) throw new Error("No reader available")
+
+    const decoder = new TextDecoder()
+    let fullContent = ""
+    const assistantMsgId = crypto.randomUUID()
+
+    // Add empty assistant message
+    set((state) => {
+      const s = state.sessions[brandId]
+      if (!s) return state
+      return {
+        sessions: {
+          ...state.sessions,
+          [brandId]: {
+            ...s,
+            messages: [
+              ...s.messages,
+              {
+                id: assistantMsgId,
+                role: "assistant" as const,
+                content: "",
+                timestamp: Date.now(),
+              },
+            ],
+          },
+        },
+      }
+    })
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      const chunk = decoder.decode(value, { stream: true })
+      fullContent += chunk
+
+      // Update the message content
+      set((state) => {
+        const s = state.sessions[brandId]
+        if (!s) return state
+        return {
+          sessions: {
+            ...state.sessions,
+            [brandId]: {
+              ...s,
+              messages: s.messages.map((m) =>
+                m.id === assistantMsgId
+                  ? { ...m, content: fullContent }
+                  : m
+              ),
+            },
+          },
+        }
+      })
+    }
+
+    // Check if strategy is ready
+    const isStrategyReady = fullContent.includes("strategy is ready")
+
+    set((state) => {
+      const s = state.sessions[brandId]
+      if (!s) return state
+      return {
+        sessions: {
+          ...state.sessions,
+          [brandId]: {
+            ...s,
+            isTyping: false,
+            strategyReady: s.strategyReady || isStrategyReady,
+          },
+        },
+      }
+    })
+  } catch (error) {
+    console.error("Chat API error:", error)
+    // Fallback: add error message
+    set((state) => {
+      const s = state.sessions[brandId]
+      if (!s) return state
+      return {
+        sessions: {
+          ...state.sessions,
+          [brandId]: {
+            ...s,
+            messages: [
+              ...s.messages,
+              createMessage(
+                "assistant",
+                "Sorry, I encountered an error connecting to the AI service. Please check your API key and try again."
+              ),
+            ],
+            isTyping: false,
+          },
+        },
+      }
+    })
+  }
+}
+
+// --- Store ---
+
 export const useChatStore = create<ChatStore>((set, get) => ({
   sessions: {
     "seed-coff-ai": SEED_COFF_AI_SESSION,
@@ -186,17 +237,14 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     const welcomeContent =
       mode === "full-auto"
         ? `I'll create a complete social media strategy for **${brandName}**. Tell me about your brand — what does it do, who is it for, and what makes it special?`
-        : MANUAL_QUESTIONS[0].question(brandName)
-
-    const welcomeOptions =
-      mode === "manual" ? MANUAL_QUESTIONS[0].options : undefined
+        : `Let's build ${brandName}'s strategy step by step. I'll ask you a series of questions to understand your brand better. Let's start — what industry or niche is ${brandName} in?`
 
     set((state) => ({
       sessions: {
         ...state.sessions,
         [brandId]: {
           mode,
-          messages: [createMessage("assistant", welcomeContent, welcomeOptions)],
+          messages: [createMessage("assistant", welcomeContent)],
           strategyReady: false,
           isTyping: false,
         },
@@ -228,84 +276,8 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       },
     }))
 
-    // Mock delay
-    const delay = 1000 + Math.random() * 1500
-
-    setTimeout(() => {
-      const currentSession = get().sessions[brandId]
-      if (!currentSession) return
-
-      const brands = useBrandStore.getState().brands
-      const brand = brands.find((b) => b.id === brandId)
-      const brandName = brand?.name ?? "your brand"
-
-      if (currentSession.mode === "full-auto") {
-        const userMsgCount = currentSession.messages.filter(
-          (m) => m.role === "user"
-        ).length
-        const responseIdx = Math.min(
-          userMsgCount - 1,
-          FULL_AUTO_RESPONSES.length - 1
-        )
-        const responseText = FULL_AUTO_RESPONSES[responseIdx](brandName)
-        const isLast = responseIdx === FULL_AUTO_RESPONSES.length - 1
-
-        set((state) => ({
-          sessions: {
-            ...state.sessions,
-            [brandId]: {
-              ...currentSession,
-              messages: [
-                ...currentSession.messages,
-                createMessage("assistant", responseText),
-              ],
-              isTyping: false,
-              strategyReady: isLast,
-            },
-          },
-        }))
-      } else {
-        // Manual mode
-        const questionIdx = getManualQuestionIndex(currentSession.messages)
-
-        if (questionIdx >= MANUAL_QUESTIONS.length) {
-          // All questions answered
-          set((state) => ({
-            sessions: {
-              ...state.sessions,
-              [brandId]: {
-                ...currentSession,
-                messages: [
-                  ...currentSession.messages,
-                  createMessage("assistant", MANUAL_FINAL_RESPONSE),
-                ],
-                isTyping: false,
-                strategyReady: true,
-              },
-            },
-          }))
-        } else {
-          const next = MANUAL_QUESTIONS[questionIdx]
-          set((state) => ({
-            sessions: {
-              ...state.sessions,
-              [brandId]: {
-                ...currentSession,
-                messages: [
-                  ...currentSession.messages,
-                  createMessage(
-                    "assistant",
-                    next.question(brandName),
-                    next.options
-                  ),
-                ],
-                isTyping: false,
-              },
-            },
-          }))
-        }
-      }
-    }, delay)
+    // Stream AI response
+    streamAIResponse(brandId, session, set, get)
   },
 
   selectOption: (brandId, option) => {

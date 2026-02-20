@@ -17,7 +17,7 @@ import {
   PLATFORMS,
   THEMES,
   computeStatus,
-  generateMockField,
+  generateField,
   generateId,
 } from "@/lib/stores/calendar-store"
 import {
@@ -169,22 +169,25 @@ export function ContentCardDetail({
 
   const handleGenerate = async (field: GeneratableField) => {
     setGenerating(field)
-    // Simulate AI delay
-    await new Promise((r) => setTimeout(r, 600 + Math.random() * 800))
-    const theme = (form.theme || card?.theme || "ai-innovation") as ContentTheme
-    const value = generateMockField(field, theme)
-    updateField(field, value)
+    try {
+      const value = await generateField(field, form, brandId)
+      updateField(field, value)
+    } catch (error) {
+      console.error(`Error generating ${field}:`, error)
+    }
     setGenerating(null)
   }
 
   const handleGenerateAll = async () => {
     setGenerating("all")
-    const theme = (form.theme || card?.theme || "ai-innovation") as ContentTheme
     for (const { key } of GENERATABLE_FIELDS) {
       if (!form[key]) {
-        await new Promise((r) => setTimeout(r, 400 + Math.random() * 400))
-        const value = generateMockField(key, theme)
-        updateField(key, value)
+        try {
+          const value = await generateField(key, form, brandId)
+          updateField(key, value)
+        } catch (error) {
+          console.error(`Error generating ${key}:`, error)
+        }
       }
     }
     setGenerating(null)

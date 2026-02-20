@@ -140,10 +140,8 @@ function formatMarkdown(text: string): string {
 
 export function StrategyChat({
   brandId,
-  onViewStrategy,
 }: {
   brandId: string
-  onViewStrategy: () => void
 }) {
   const brands = useBrandStore((s) => s.brands)
   const brand = brands.find((b) => b.id === brandId)
@@ -154,6 +152,7 @@ export function StrategyChat({
   const selectOption = useChatStore((s) => s.selectOption)
 
   const generateStrategy = useStrategyStore((s) => s.generateStrategy)
+  const strategy = useStrategyStore((s) => s.strategies[brandId])
 
   const [input, setInput] = useState("")
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -197,9 +196,8 @@ export function StrategyChat({
     }
   }
 
-  const handleViewStrategy = () => {
+  const handleGenerateStrategy = () => {
     generateStrategy(brandId, brand.name)
-    onViewStrategy()
   }
 
   // Get options from last assistant message
@@ -255,12 +253,12 @@ export function StrategyChat({
             </div>
           )}
 
-          {/* View Strategy button */}
-          {session.strategyReady && !session.isTyping && (
+          {/* Generate Strategy button — only if strategy not yet created */}
+          {session.strategyReady && !session.isTyping && !strategy && (
             <div className="flex justify-center pt-2">
-              <Button size="lg" className="gap-2" onClick={handleViewStrategy}>
+              <Button size="lg" className="gap-2" onClick={handleGenerateStrategy}>
                 <IconMessageDots className="size-4" />
-                View Strategy
+                Generate Strategy
               </Button>
             </div>
           )}
@@ -270,33 +268,33 @@ export function StrategyChat({
       </div>
 
       {/* Input */}
-      {!session.strategyReady && (
-        <div className="border-t px-2 py-2 sm:px-4 sm:py-3">
-          <div className="mx-auto flex items-end gap-2 sm:max-w-2xl">
-            <textarea
-              ref={inputRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder={
-                session.mode === "full-auto"
+      <div className="border-t px-2 py-2 sm:px-4 sm:py-3">
+        <div className="mx-auto flex items-end gap-2 sm:max-w-2xl">
+          <textarea
+            ref={inputRef}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={
+              strategy
+                ? "Ask follow-up questions about your strategy..."
+                : session.mode === "full-auto"
                   ? "Describe your brand..."
                   : "Type your answer or pick an option above..."
-              }
-              rows={1}
-              disabled={session.isTyping}
-              className="max-h-32 min-h-[40px] flex-1 resize-none rounded-xl border border-input bg-background px-4 py-2.5 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-ring disabled:opacity-50"
-            />
-            <Button
-              size="icon"
-              onClick={handleSend}
-              disabled={!input.trim() || session.isTyping}
-            >
-              <IconSend2 className="size-4" />
-            </Button>
-          </div>
+            }
+            rows={1}
+            disabled={session.isTyping}
+            className="max-h-32 min-h-[40px] flex-1 resize-none rounded-xl border border-input bg-background px-4 py-2.5 text-sm outline-none transition-colors placeholder:text-muted-foreground focus:border-ring disabled:opacity-50"
+          />
+          <Button
+            size="icon"
+            onClick={handleSend}
+            disabled={!input.trim() || session.isTyping}
+          >
+            <IconSend2 className="size-4" />
+          </Button>
         </div>
-      )}
+      </div>
     </div>
   )
 }

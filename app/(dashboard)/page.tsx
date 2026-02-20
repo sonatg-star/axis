@@ -1,6 +1,5 @@
 "use client"
 
-import { useState } from "react"
 import { useBrandStore } from "@/lib/stores/brand-store"
 import { useStrategyStore } from "@/lib/stores/strategy-store"
 import { useNavigationStore } from "@/lib/stores/navigation-store"
@@ -14,24 +13,21 @@ import { AdvertisingView } from "@/components/advertising-view"
 import { AdPerformanceView } from "@/components/ad-performance-view"
 
 function StrategyView({ brandId }: { brandId: string }) {
-  const [showDocument, setShowDocument] = useState(
-    () => !!useStrategyStore.getState().strategies[brandId]
-  )
+  const strategy = useStrategyStore((s) => s.strategies[brandId])
 
-  if (showDocument) {
-    return (
-      <StrategyDocument
-        brandId={brandId}
-        onBackToChat={() => setShowDocument(false)}
-      />
-    )
+  if (!strategy) {
+    return <StrategyChat brandId={brandId} />
   }
 
   return (
-    <StrategyChat
-      brandId={brandId}
-      onViewStrategy={() => setShowDocument(true)}
-    />
+    <div className="flex h-full flex-col">
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <StrategyDocument brandId={brandId} />
+      </div>
+      <div className="h-[350px] shrink-0 border-t">
+        <StrategyChat brandId={brandId} />
+      </div>
+    </div>
   )
 }
 

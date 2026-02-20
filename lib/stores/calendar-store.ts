@@ -6,6 +6,8 @@ import {
   addWeeks,
   format,
 } from "date-fns"
+import { useBrandStore } from "./brand-store"
+import { useStrategyStore } from "./strategy-store"
 
 // --- Types ---
 
@@ -63,6 +65,7 @@ type CalendarStore = {
   currentDate: Date
   view: CalendarView
   settings: CalendarSettings
+  isGenerating: boolean
   setView: (view: CalendarView) => void
   setCurrentDate: (date: Date) => void
   navigateForward: () => void
@@ -77,7 +80,7 @@ type CalendarStore = {
   duplicateCard: (brandId: string, cardId: string) => ContentCard | null
 }
 
-// --- Mock data generation ---
+// --- Labels & constants ---
 
 const FORMATS: ContentFormat[] = ["reel", "carousel", "single-post", "story"]
 const PLATFORMS: Platform[] = ["instagram", "tiktok", "linkedin", "x"]
@@ -112,6 +115,95 @@ const PLATFORM_LABELS: Record<Platform, string> = {
   pinterest: "Pinterest",
   x: "X",
 }
+
+const STATUS_PIPELINE: CardStatus[] = [
+  "plan",
+  "story",
+  "prompt",
+  "production",
+  "caption",
+  "ready",
+]
+
+const STATUS_LABELS: Record<CardStatus, string> = {
+  plan: "Plan",
+  story: "Story",
+  prompt: "Prompt",
+  production: "Production",
+  caption: "Caption",
+  ready: "Ready",
+}
+
+function computeStatus(card: Partial<ContentCard>): CardStatus {
+  if (card.caption) return "ready"
+  if (card.productionGuide) return "caption"
+  if (card.prompts) return "production"
+  if (card.narrative) return "prompt"
+  if (card.hook) return "story"
+  return "plan"
+}
+
+function generateId() {
+  return `card-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+// --- Exports ---
+
+export {
+  THEME_LABELS,
+  FORMAT_LABELS,
+  PLATFORM_LABELS,
+  FORMATS,
+  PLATFORMS,
+  THEMES,
+  STATUS_PIPELINE,
+  STATUS_LABELS,
+  computeStatus,
+  generateId,
+}
+
+// --- AI field generation ---
+
+export async function generateField(
+  field: "hook" | "narrative" | "productionGuide" | "prompts" | "caption",
+  card: Partial<ContentCard>,
+  brandId: string
+): Promise<string> {
+  const brands = useBrandStore.getState().brands
+  const brand = brands.find((b) => b.id === brandId)
+  const brandName = brand?.name ?? "Brand"
+  const brandDescription = brand?.description ?? ""
+
+  try {
+    const response = await fetch("/api/calendar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "generate-field",
+        brandName,
+        brandDescription,
+        card: {
+          title: card.title || "Untitled",
+          theme: card.theme || "ai-innovation",
+          format: card.format || "single-post",
+          platform: card.platform || "instagram",
+          date: card.date || "",
+        },
+        field,
+      }),
+    })
+
+    if (!response.ok) throw new Error(`API error: ${response.status}`)
+
+    const data = await response.json()
+    return data.content
+  } catch (error) {
+    console.error(`Field generation error (${field}):`, error)
+    return `[Error generating ${field}. Please try again.]`
+  }
+}
+
+// --- Mock fallback for calendar generation ---
 
 const MOCK_TITLES: Record<ContentTheme, string[]> = {
   "ai-innovation": [
@@ -153,23 +245,16 @@ const MOCK_TITLES: Record<ContentTheme, string[]> = {
 
 const POSTING_TIMES = ["08:00", "10:30", "12:00", "14:30", "17:00", "19:00"]
 
-function generateId() {
-  return `card-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-}
-
 function generateMockCards(brandId: string, startDate: Date): ContentCard[] {
   const cards: ContentCard[] = []
   const weekStart = startOfWeek(startDate, { weekStartsOn: 1 })
 
-  // Generate 2 weeks of content
   for (let week = 0; week < 2; week++) {
     for (let day = 0; day < 7; day++) {
       const date = addDays(addWeeks(weekStart, week), day)
       const dateStr = format(date, "yyyy-MM-dd")
-
-      // Skip weekends for lighter schedule
       const isWeekend = day >= 5
-      const postsToday = isWeekend ? 1 : Math.floor(Math.random() * 2) + 2 // 2-3 on weekdays, 1 on weekends
+      const postsToday = isWeekend ? 1 : Math.floor(Math.random() * 2) + 2
 
       for (let post = 0; post < postsToday; post++) {
         const theme = THEMES[Math.floor(Math.random() * THEMES.length)]
@@ -194,7 +279,6 @@ function generateMockCards(brandId: string, startDate: Date): ContentCard[] {
     }
   }
 
-  // Sort by date and time
   cards.sort((a, b) => {
     if (a.date !== b.date) return a.date.localeCompare(b.date)
     return a.time.localeCompare(b.time)
@@ -203,152 +287,13 @@ function generateMockCards(brandId: string, startDate: Date): ContentCard[] {
   return cards
 }
 
-// --- Constants & Helpers (exported for components) ---
-
-export { THEME_LABELS, FORMAT_LABELS, PLATFORM_LABELS, FORMATS, PLATFORMS, THEMES }
-
-export const STATUS_PIPELINE: CardStatus[] = [
-  "plan",
-  "story",
-  "prompt",
-  "production",
-  "caption",
-  "ready",
-]
-
-export const STATUS_LABELS: Record<CardStatus, string> = {
-  plan: "Plan",
-  story: "Story",
-  prompt: "Prompt",
-  production: "Production",
-  caption: "Caption",
-  ready: "Ready",
-}
-
-export function computeStatus(card: Partial<ContentCard>): CardStatus {
-  if (card.caption) return "ready"
-  if (card.productionGuide) return "caption"
-  if (card.prompts) return "production"
-  if (card.narrative) return "prompt"
-  if (card.hook) return "story"
-  return "plan"
-}
-
-export { generateId }
-
-// --- Mock content generation ---
-
-const MOCK_HOOKS: Record<ContentTheme, string[]> = {
-  "ai-innovation": [
-    "What if your coffee knew exactly how you like it? ☕🤖",
-    "We trained an AI on 10,000 flavor profiles. Here's what it found.",
-    "Stop guessing. Let AI find your perfect brew.",
-  ],
-  "coffee-education": [
-    "You've been brewing your coffee wrong. Here's the fix.",
-    "Water temperature can make or break your cup. Here's why.",
-    "Think all espresso tastes the same? Think again.",
-  ],
-  lifestyle: [
-    "The morning ritual that changed everything.",
-    "Your desk setup is incomplete without this.",
-    "POV: The perfect Sunday morning brew.",
-  ],
-  community: [
-    "This barista's latte art will blow your mind 🎨",
-    "You asked, we answered: your top 5 brew questions.",
-    "Our community's most creative coffee recipes this week.",
-  ],
-  "behind-the-scenes": [
-    "Ever wonder what happens before the beans reach your cup?",
-    "A day in the life at the Coff AI roastery.",
-    "The team tried 47 blends to find this one.",
-  ],
-}
-
-const MOCK_NARRATIVES: Record<ContentTheme, string[]> = {
-  "ai-innovation": [
-    "Walk through how our AI taste-matching algorithm works. Start with the user filling out a quick flavor preference quiz, then show the AI analyzing patterns across thousands of coffee profiles. End with the personalized recommendation reveal.",
-    "Compare traditional cupping scores with our AI predictions. Show a split-screen of a professional cupper vs. our algorithm rating the same 5 coffees. Highlight where they agree and where AI found surprising matches.",
-  ],
-  "coffee-education": [
-    "Break down the 4 main brewing methods (pour-over, French press, espresso, cold brew) with side-by-side comparisons. Focus on grind size, water temp, and extraction time. End with a 'which one is right for you' decision framework.",
-    "Deep dive into single-origin vs. blend. Start with where beans are sourced, show the roasting differences, then do a taste comparison. Make it accessible — no jargon.",
-  ],
-  lifestyle: [
-    "Document the perfect morning routine: wake up, grind fresh beans, brew with intention. Capture the aesthetic — steam rising, sunlight through the window. Tie it back to productivity and mindfulness.",
-    "Show 3 different workspace setups and the coffee that fits each vibe: minimalist desk + black coffee, cozy home office + latte, standing desk + cold brew. Make viewers tag their setup.",
-  ],
-  community: [
-    "Feature 3 community members and their unique coffee rituals. Quick interview style: what they brew, how they brew it, and what coffee means to them. End with a CTA to share your own.",
-    "Compile the best user-submitted latte art from the past month. Show the progression from beginner attempts to pro-level designs. Encourage everyone to keep practicing.",
-  ],
-  "behind-the-scenes": [
-    "Follow a bag of beans from the farm to the roastery. Show the sourcing relationship, quality checks, sample roasting, and the final packaging. Emphasize sustainability and fair trade.",
-    "Take viewers through a team tasting session. Show the setup, the blind tasting process, everyone's reactions, and the final scores. Reveal which blend won and announce it as next month's special.",
-  ],
-}
-
-const MOCK_PRODUCTION_GUIDES: string[] = [
-  "• Shoot in natural lighting (golden hour preferred)\n• Use vertical format (9:16) for Reels/TikTok\n• Include B-roll of coffee preparation\n• Add text overlays for key points\n• Background music: lo-fi or acoustic",
-  "• Film in the studio with ring light setup\n• Multiple angles: overhead, 45°, close-up\n• Capture steam/pour shots in slow motion\n• Use brand color palette in graphics\n• Duration: 30-60 seconds",
-  "• User-generated style — casual, authentic\n• Phone camera is fine (adds authenticity)\n• Include face-to-camera segments\n• Add captions/subtitles\n• Keep transitions simple and clean",
-]
-
-const MOCK_PROMPTS: string[] = [
-  "Create a visually engaging post about [topic]. Use warm, inviting tones. Include a strong opening hook, 3 key points, and end with a question to drive engagement. Target audience: coffee enthusiasts aged 25-40.",
-  "Generate a storytelling post that connects [topic] to everyday life. Use conversational language, include specific details that make it relatable, and end with a clear call-to-action.",
-  "Write an educational post about [topic] that's accessible to beginners. Break complex concepts into simple analogies. Include one surprising fact. End with a 'try this at home' suggestion.",
-]
-
-const MOCK_CAPTIONS: Record<ContentTheme, string[]> = {
-  "ai-innovation": [
-    "The future of coffee is personal. Our AI doesn't just recommend — it learns your palate. ☕✨\n\nWhat's your go-to brew? Drop it below and let's see if our AI agrees 👇\n\n#CoffAI #AIcoffee #PersonalizedCoffee #CoffeeTech #SmartBrewing #FutureOfCoffee #CoffeeLovers",
-    "We asked our AI to predict the next big coffee trend. The answer surprised even us. 🤖☕\n\nSwipe to see the full breakdown →\n\n#CoffeeTrends #AIpredictions #CoffAI #CoffeeInnovation #TechMeetsCoffee",
-  ],
-  "coffee-education": [
-    "Your water temperature matters more than your beans. Yes, really. 🌡️☕\n\nHere's the perfect temp for every brewing method (save this!):\n→ Pour-over: 195-205°F\n→ French Press: 200°F\n→ Cold Brew: Room temp\n→ Espresso: 195-200°F\n\n#CoffeeEducation #BrewingTips #CoffeeScience #HomeBarista #CoffeeFacts",
-    "Single origin or blend? Here's how to actually choose. ☕\n\nSingle origin = unique, terroir-driven flavors\nBlend = balanced, consistent, complex\n\nNeither is better — it's about what YOU enjoy.\n\n#CoffeeKnowledge #SingleOrigin #CoffeeBlend #CoffAI #CoffeeGuide",
-  ],
-  lifestyle: [
-    "The best mornings start before the world wakes up. ☀️☕\n\nGrind. Brew. Breathe. The ritual matters as much as the cup.\n\nHow do you start your mornings? ☕👇\n\n#MorningRitual #CoffeeRoutine #SlowMorning #CoffeeMoments #MindfulBrewing",
-    "Your workspace, your rules. Your coffee, your way. 💻☕\n\nTag someone who needs to upgrade their desk setup ☕✨\n\n#WorkFromHome #CoffeeAndWork #DeskSetup #CoffeeAesthetic #ProductivityTips",
-  ],
-  community: [
-    "This week's community spotlight goes to @coffeelover2026 for this INCREDIBLE latte art! 🎨☕\n\nWant to be featured? Tag us in your best coffee moment!\n\n#CoffAICommunity #LatteArt #CoffeeCommunity #HomeBarista #CoffeeCreatives",
-    "You asked, we answered! Here are your TOP 5 brewing questions this week ☕\n\nSwipe through for the answers → Which one surprised you most?\n\n#CoffeeQA #AskCoffAI #CoffeeTips #CommunityQuestions #CoffeeAnswers",
-  ],
-  "behind-the-scenes": [
-    "From farm to cup — here's what happens before your coffee reaches you. 🌱→☕\n\nEvery bag has a story. This is ours.\n\n#BehindTheScenes #CoffeeJourney #FarmToCup #Sustainability #CoffAI #EthicalCoffee",
-    "47 blends. Countless hours. One perfect cup. ☕\n\nTake a peek at our team's tasting session — this is how we find your next favorite.\n\n#TeamCoffAI #CoffeeTasting #BTS #Roastery #CoffeeProcess",
-  ],
-}
-
-export function generateMockField(
-  field: "hook" | "narrative" | "productionGuide" | "prompts" | "caption",
-  theme: ContentTheme
-): string {
-  const pick = <T>(arr: T[]) => arr[Math.floor(Math.random() * arr.length)]
-  switch (field) {
-    case "hook":
-      return pick(MOCK_HOOKS[theme])
-    case "narrative":
-      return pick(MOCK_NARRATIVES[theme])
-    case "productionGuide":
-      return pick(MOCK_PRODUCTION_GUIDES)
-    case "prompts":
-      return pick(MOCK_PROMPTS)
-    case "caption":
-      return pick(MOCK_CAPTIONS[theme])
-  }
-}
-
 // --- Store ---
 
 export const useCalendarStore = create<CalendarStore>((set, get) => ({
   cards: {},
   currentDate: new Date(),
   view: "week",
+  isGenerating: false,
   settings: {
     postsPerDay: 3,
     daysPerWeek: 7,
@@ -363,7 +308,6 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
     if (view === "week") {
       set({ currentDate: addWeeks(currentDate, 1) })
     } else {
-      // Move forward by ~1 month
       const next = new Date(currentDate)
       next.setMonth(next.getMonth() + 1)
       set({ currentDate: next })
@@ -390,11 +334,77 @@ export const useCalendarStore = create<CalendarStore>((set, get) => ({
   },
 
   generateCalendar: (brandId) => {
-    const { currentDate } = get()
-    const cards = generateMockCards(brandId, currentDate)
-    set((state) => ({
-      cards: { ...state.cards, [brandId]: cards },
-    }))
+    const { currentDate, settings } = get()
+    const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 })
+    const startDate = format(weekStart, "yyyy-MM-dd")
+    const endDate = format(addDays(addWeeks(weekStart, 1), 6), "yyyy-MM-dd")
+
+    const brands = useBrandStore.getState().brands
+    const brand = brands.find((b) => b.id === brandId)
+    const brandName = brand?.name ?? "Brand"
+    const brandDescription = brand?.description ?? ""
+
+    // Get strategy context
+    const strategy = useStrategyStore.getState().strategies[brandId]
+    const strategyContext = strategy
+      ? strategy.sections.map((s) => `${s.title}: ${s.content.slice(0, 200)}`).join("\n")
+      : ""
+
+    set({ isGenerating: true })
+
+    fetch("/api/calendar", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "generate-calendar",
+        brandName,
+        brandDescription,
+        strategy: strategyContext,
+        startDate,
+        endDate,
+        postsPerDay: settings.postsPerDay,
+        daysPerWeek: settings.daysPerWeek,
+        themes: THEMES,
+      }),
+    })
+      .then((res) => {
+        if (!res.ok) throw new Error(`API error: ${res.status}`)
+        return res.json()
+      })
+      .then((data) => {
+        const cards: ContentCard[] = data.cards.map(
+          (c: { date: string; time: string; format: ContentFormat; platform: Platform; theme: ContentTheme; title: string }) => ({
+            id: generateId(),
+            brandId,
+            date: c.date,
+            time: c.time,
+            format: c.format,
+            platform: c.platform,
+            theme: c.theme,
+            title: c.title,
+            status: "plan" as const,
+          })
+        )
+
+        cards.sort((a, b) => {
+          if (a.date !== b.date) return a.date.localeCompare(b.date)
+          return a.time.localeCompare(b.time)
+        })
+
+        set((state) => ({
+          cards: { ...state.cards, [brandId]: cards },
+          isGenerating: false,
+        }))
+      })
+      .catch((error) => {
+        console.error("Calendar generation error:", error)
+        // Fallback to mock data
+        const cards = generateMockCards(brandId, currentDate)
+        set((state) => ({
+          cards: { ...state.cards, [brandId]: cards },
+          isGenerating: false,
+        }))
+      })
   },
 
   moveCard: (brandId, cardId, newDate) => {

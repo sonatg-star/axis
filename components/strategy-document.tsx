@@ -30,7 +30,6 @@ import {
   IconChartBar,
   IconChevronDown,
   IconChevronUp,
-  IconArrowLeft,
 } from "@tabler/icons-react"
 import { cn } from "@/lib/utils"
 
@@ -231,10 +230,8 @@ function formatStrategyMarkdown(text: string): string {
 
 export function StrategyDocument({
   brandId,
-  onBackToChat,
 }: {
   brandId: string
-  onBackToChat: () => void
 }) {
   const strategy = useStrategyStore((s) => s.strategies[brandId])
   const approveStrategy = useStrategyStore((s) => s.approveStrategy)
@@ -254,14 +251,6 @@ export function StrategyDocument({
     <div className="flex h-full flex-col">
       {/* Header */}
       <div className="flex items-center gap-3 border-b px-4 py-3">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-8"
-          onClick={onBackToChat}
-        >
-          <IconArrowLeft className="size-4" />
-        </Button>
         <div className="flex size-8 items-center justify-center rounded-lg bg-primary/10 text-xs font-bold text-primary">
           {brand.initials}
         </div>
@@ -278,13 +267,15 @@ export function StrategyDocument({
           className={cn(
             "gap-1.5 capitalize",
             strategy.status === "approved" &&
-              "bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/15"
+              "bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/15",
+            strategy.status === "generating" &&
+              "bg-blue-500/10 text-blue-600"
           )}
         >
           {strategy.status === "approved" && (
             <IconRosetteDiscountCheck className="size-3.5" />
           )}
-          {strategy.status}
+          {strategy.status === "generating" ? "Generating..." : strategy.status}
         </Badge>
       </div>
 
@@ -298,6 +289,16 @@ export function StrategyDocument({
               brandId={brandId}
             />
           ))}
+
+          {/* Generating indicator */}
+          {strategy.status === "generating" && (
+            <div className="flex flex-col items-center gap-3 pt-8 pb-8">
+              <div className="size-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+              <p className="text-sm text-muted-foreground">
+                Generating strategy with AI...
+              </p>
+            </div>
+          )}
 
           {/* Approve Button */}
           {strategy.status === "draft" && (
