@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import { useCalendarStore, type ContentCard } from "@/lib/stores/calendar-store"
 import { CalendarHeader } from "./calendar-header"
 import { CalendarSettings } from "./calendar-settings"
@@ -48,7 +48,16 @@ export function ContentCalendar({ brandId }: { brandId: string }) {
   const addCard = useCalendarStore((s) => s.addCard)
   const isMobile = useIsMobile()
 
+  const isGenerating = useCalendarStore((s) => s.isGenerating)
   const hasCards = !!cards && cards.length > 0
+
+  // Auto-generate mock data if empty
+  useEffect(() => {
+    if (!hasCards && !isGenerating) {
+      generateCalendar(brandId)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [brandId])
 
   // Detail panel state
   const [selectedCard, setSelectedCard] = useState<ContentCard | null>(null)

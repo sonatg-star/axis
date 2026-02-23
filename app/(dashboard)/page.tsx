@@ -10,7 +10,7 @@ import {
   ResizablePanel,
   ResizableHandle,
 } from "@/components/ui/resizable"
-import { ContentCalendar } from "@/components/content-calendar"
+import { ContentCalendar } from "@/components/calendar/content-calendar"
 import { ProductionView } from "@/components/production-view"
 import { PublishView } from "@/components/publish-view"
 import { AnalyticsDashboard } from "@/components/analytics-dashboard"

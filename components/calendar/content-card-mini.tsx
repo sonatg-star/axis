@@ -40,6 +40,7 @@ function hashString(str: string): number {
 }
 
 export function getThemeColor(theme: string) {
+  if (!theme) return THEME_COLOR_PALETTE[0]
   const idx = hashString(theme) % THEME_COLOR_PALETTE.length
   return THEME_COLOR_PALETTE[idx]
 }
@@ -72,8 +73,8 @@ export function ContentCardMini({
   isDragging?: boolean
 }) {
   const colors = getThemeColor(card.theme)
-  const FormatIcon = FORMAT_ICONS[card.format]
-  const PlatformIcon = PLATFORM_ICONS[card.platform]
+  const FormatIcon = FORMAT_ICONS[card.format] ?? IconVideo
+  const PlatformIcon = PLATFORM_ICONS[card.platform] ?? IconBrandInstagram
 
   return (
     <button

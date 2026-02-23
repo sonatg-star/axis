@@ -508,8 +508,34 @@ export const useCalendarStore = create<CalendarStore>()(
       name: "axis-calendar",
       partialize: (state) => ({
         cards: state.cards,
+        view: state.view,
         settings: state.settings,
+        currentDate: state.currentDate,
       }),
+      storage: {
+        getItem: (name) => {
+          if (typeof window === "undefined") return null
+          try {
+            const str = localStorage.getItem(name)
+            if (!str) return null
+            const parsed = JSON.parse(str)
+            if (parsed?.state?.currentDate) {
+              parsed.state.currentDate = new Date(parsed.state.currentDate)
+            }
+            return parsed
+          } catch {
+            return null
+          }
+        },
+        setItem: (name, value) => {
+          if (typeof window === "undefined") return
+          localStorage.setItem(name, JSON.stringify(value))
+        },
+        removeItem: (name) => {
+          if (typeof window === "undefined") return
+          localStorage.removeItem(name)
+        },
+      },
     }
   )
 )
