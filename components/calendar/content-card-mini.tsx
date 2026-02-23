@@ -79,9 +79,9 @@ export function ContentCardMini({
   onClick?: () => void
   isDragging?: boolean
 }) {
-  const colors = THEME_COLORS[card.theme]
-  const FormatIcon = FORMAT_ICONS[card.format]
-  const PlatformIcon = PLATFORM_ICONS[card.platform]
+  const colors = THEME_COLORS[card.theme] ?? THEME_COLORS["ai-innovation"]
+  const FormatIcon = FORMAT_ICONS[card.format] ?? IconVideo
+  const PlatformIcon = PLATFORM_ICONS[card.platform] ?? IconBrandInstagram
 
   return (
     <button
@@ -118,7 +118,7 @@ export function ContentCardCompact({
   card: ContentCard
   onClick?: () => void
 }) {
-  const colors = THEME_COLORS[card.theme]
+  const colors = THEME_COLORS[card.theme] ?? THEME_COLORS["ai-innovation"]
 
   return (
     <button
